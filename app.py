@@ -8,6 +8,7 @@ from Components.year import components_years  # Importing the data from componen
 # Initialize the Dash app
 app = dash.Dash(__name__)
 app.enable_dev_tools(debug=False, dev_tools_ui=False)
+server = app.server
 
 # App Layout
 app.layout = html.Div([
