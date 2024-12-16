@@ -2,60 +2,56 @@ import dash
 from dash import dcc, html, Input, Output, State
 import requests
 import plotly.graph_objs as go
-from Components.indicators import components_data 
-from Components.year import components_years  # Importing the data from components.py
+from Components.indicators import components_data
+from Components.year import components_years
 
 # Initialize the Dash app
 app = dash.Dash(__name__)
-server = app.server
+server=app.server
+
+# Common styles for layout
+HEADER_STYLE = {"textAlign": "center", "color": "#4CAF50", "font-family": "Arial, sans-serif", "margin-bottom": "20px"}
+LABEL_STYLE = {"font-weight": "bold", "font-size": "16px"}
+BUTTON_STYLE = {
+    "background-color": "#4CAF50", "color": "white", "border": "none",
+    "padding": "10px 20px", "font-size": "16px", "cursor": "pointer"
+}
+GRAPH_STYLE = {"margin-top": "30px", "width": "100%", "max-width": "48%", "display": "inline-block"}
 
 # App Layout
 app.layout = html.Div([
-    html.H1("Economic Indicators ", style={
-        "textAlign": "center", 
-        "color": "#4CAF50", 
-        "font-family": "Arial, sans-serif", 
-        "margin-bottom": "20px"
-    }),
+    html.H1("Economic Indicators", style=HEADER_STYLE),
 
     # Dropdowns for filtering
     html.Div([
-        html.Label("Select Year:", style={"font-weight": "bold", "font-size": "16px"}),
+        html.Label("Select Year:", style=LABEL_STYLE),
         dcc.Dropdown(
             id='year-dropdown',
-            options=[{'label': str(year), 'value': year} for year in components_years['years']] ,
+            options=[{'label': str(year), 'value': year} for year in components_years['years']],
             placeholder="Select Year",
             style={"margin-bottom": "20px"}
         ),
 
-        html.Label("Select Indicator:", style={"font-weight": "bold", "font-size": "16px"}),
+        html.Label("Select Indicator:", style=LABEL_STYLE),
         dcc.Dropdown(
             id='indicator-dropdown',
-            options=[{'label': indicator, 'value': indicator} for indicator in components_data['indicators']] ,
+            options=[{'label': indicator, 'value': indicator} for indicator in components_data['indicators']],
             placeholder="Select Indicator",
             style={"margin-bottom": "20px"}
         ),
 
         # Submit Button
-        html.Button('Submit', id='submit-button', n_clicks=0, style={
-            "background-color": "#4CAF50", 
-            "color": "white", 
-            "border": "none", 
-            "padding": "10px 20px", 
-            "font-size": "16px", 
-            "cursor": "pointer"
-        }),
-    ], style={"width": "50%", "margin": "auto"}),
+        html.Button('Submit', id='submit-button', n_clicks=0, style=BUTTON_STYLE),
+    ], style={"width": "100%", "max-width": "600px", "margin": "auto"}),
 
-    # Line Graph
+    # Graphs
     html.Div([
-        dcc.Graph(id='line-graph', style={"margin-top": "30px", "width": "48%", "display": "inline-block"}),
-        dcc.Graph(id='bar-graph', style={"margin-top": "30px", "width": "48%", "display": "inline-block"}),
-    ])
+        dcc.Graph(id='line-graph', style=GRAPH_STYLE),
+        dcc.Graph(id='bar-graph', style=GRAPH_STYLE),
+    ], style={"display": "flex", "justify-content": "space-around", "flex-wrap": "wrap"})
 ])
 
-
-# Callback to fetch and filter the data based on dropdown selections when the Submit button is clicked
+# Callback to fetch and filter data based on dropdown selections
 @app.callback(
     [Output('line-graph', 'figure'),
      Output('bar-graph', 'figure')],
@@ -64,72 +60,61 @@ app.layout = html.Div([
      State('indicator-dropdown', 'value')]
 )
 def update_graphs(n_clicks, selected_year, selected_indicator):
-    if n_clicks > 0:  # Check if the button has been clicked
-        print(f"Button clicked {n_clicks} times.")  # Debugging print
-        
-        # Check if selected values are valid
-        if selected_year is None or selected_indicator is None:
-            print("Year or Indicator not selected.")
-            return go.Figure(), go.Figure()  # Return empty figures if not selected
+    if n_clicks > 0:
+        # Validate user inputs
+        if not selected_year or not selected_indicator:
+            print("Year or Indicator not selected. Returning empty graphs.")
+            return go.Figure(), go.Figure()
 
-        # Prepare data for the POST request
+        # Prepare the API payload
         payload = {}
         if selected_year != 'All':
-            payload['year'] = selected_year  # Only include year if not 'All'
+            payload['year'] = selected_year
         if selected_indicator != 'All':
-            payload['indicator'] = selected_indicator  # Include indicator if not 'All'
-        print(f"Sending payload: {payload}")  # Debugging print to check payload
-        
-        headers = {'Content-Type': 'application/json'}  # Adding Content-Type header
+            payload['indicator'] = selected_indicator
 
-        # Fetch data from the API using POST request
+        headers = {'Content-Type': 'application/json'}
         api_url = "https://nrpuapi-137b31326fcb.herokuapp.com/api/economic-data/"
+
         try:
-            response = requests.post(api_url, json=payload, headers=headers)  # Send POST request with payload
-            response.raise_for_status()  # Raise an error for bad responses
-            
-            # Extract relevant data
-            data = response.json()['data']
+            response = requests.post(api_url, json=payload, headers=headers)
+            response.raise_for_status()
+            data = response.json().get('data', [])
         except requests.exceptions.RequestException as e:
             print(f"Error fetching data: {e}")
-            return go.Figure(), go.Figure()  # Return empty figures if the API call fails
+            return go.Figure(), go.Figure()
 
-        # Filter and prepare data for the graphs
+        # Check if data is available
+        if not data:
+            print("No data returned from the API.")
+            return go.Figure(), go.Figure()
+
+        # Prepare graph data
+        x_values = [d['Years'] for d in data]
+
         if selected_indicator == 'All':
-            figure_data_line = []
-            figure_data_bar = []
-            for indicator in components_data['indicators']:
-                y_values = [d.get(indicator, None) for d in data]
-                x_values = [d['Years'] for d in data]
-                figure_data_line.append(go.Scatter(
-                    x=x_values, y=y_values, mode='lines+markers', name=indicator
-                ))
-                figure_data_bar.append(go.Bar(
-                    x=x_values, y=y_values, name=indicator
-                ))
+            figure_data_line = [
+                go.Scatter(x=x_values, y=[d.get(indicator) for d in data], mode='lines+markers', name=indicator)
+                for indicator in components_data['indicators']
+            ]
+            figure_data_bar = [
+                go.Bar(x=x_values, y=[d.get(indicator) for d in data], name=indicator)
+                for indicator in components_data['indicators']
+            ]
         else:
             y_values = [d[selected_indicator] for d in data]
-            x_values = [d['Years'] for d in data]
-            figure_data_line = [go.Scatter(
-                x=x_values, y=y_values, mode='lines+markers', name=selected_indicator
-            )]
-            figure_data_bar = [go.Bar(
-                x=x_values, y=y_values, name=selected_indicator
-            )]
+            figure_data_line = [go.Scatter(x=x_values, y=y_values, mode='lines+markers', name=selected_indicator)]
+            figure_data_bar = [go.Bar(x=x_values, y=y_values, name=selected_indicator)]
 
         # Create Line Graph
         line_figure = go.Figure(
             data=figure_data_line,
             layout=go.Layout(
-                title=dict(
-                    text="Economic Data Line Graph",
-                    font=dict(size=20, color="#333"),
-                    x=0.5
-                ),
+                title=dict(text="Economic Data Line Graph", font=dict(size=20, color="#333"), x=0.5),
                 xaxis=dict(title="Year"),
                 yaxis=dict(title="Value"),
                 plot_bgcolor="#f9f9f9",
-                paper_bgcolor="#ffffff",
+                paper_bgcolor="#ffffff"
             )
         )
 
@@ -137,23 +122,19 @@ def update_graphs(n_clicks, selected_year, selected_indicator):
         bar_figure = go.Figure(
             data=figure_data_bar,
             layout=go.Layout(
-                title=dict(
-                    text="Economic Data Bar Graph",
-                    font=dict(size=20, color="#333"),
-                    x=0.5
-                ),
+                title=dict(text="Economic Data Bar Graph", font=dict(size=20, color="#333"), x=0.5),
                 xaxis=dict(title="Year"),
                 yaxis=dict(title="Value"),
                 plot_bgcolor="#f9f9f9",
-                paper_bgcolor="#ffffff",
+                paper_bgcolor="#ffffff"
             )
         )
 
         return line_figure, bar_figure
 
-    return go.Figure(), go.Figure()  # Return empty figures if the button hasn't been clicked
-
+    # Return empty graphs by default
+    return go.Figure(), go.Figure()
 
 # Run the app
 if __name__ == '__main__':
-    app.run_server(debug=False)
+    app.run_server()
