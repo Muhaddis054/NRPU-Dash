@@ -118,7 +118,7 @@ def update_graphs(n_clicks, selected_year, selected_indicator):
             )
         )
 
-        # Create Bar Graph
+        
         bar_figure = go.Figure(
             data=figure_data_bar,
             layout=go.Layout(
